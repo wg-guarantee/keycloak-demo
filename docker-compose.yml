@@ -1,0 +1,146 @@
+version: '3.8'
+
+# Keycloak Demo - Docker Compose 完整配置版本 v1.0
+
+services:
+  # ====== MySQL 数据库 ======
+  mysql:
+    image: mysql:8.0
+    container_name: keycloak-demo-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-webank}
+      MYSQL_USER: ${MYSQL_USER:-webank}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-webank123}
+      MYSQL_TEST_CONTAINER: "true"
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/1-init.sql
+      - ./database/migrations/V1__initial_schema.sql:/docker-entrypoint-initdb.d/2-flyway.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER:-webank}", "-p${MYSQL_PASSWORD:-webank123}"]
+      timeout: 20s
+      retries: 10
+      start_period: 40s
+    networks:
+      - webank-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ====== Keycloak 认证服务 ======
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0.0
+    container_name: keycloak-demo-keycloak
+    restart: unless-stopped
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-webank}?useSSL=false&serverTimezone=UTC
+      KC_DB_USERNAME: ${MYSQL_USER:-webank}
+      KC_DB_PASSWORD: ${MYSQL_PASSWORD:-webank123}
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_PORT: 8180
+      KC_PROXY: edge
+      KC_HTTP_ENABLED: "true"
+      KEYCLOAK_LOGLEVEL: INFO
+      ROOT_LOGLEVEL: INFO
+    ports:
+      - "8180:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    command:
+      - start
+      - --import-realm
+      - --db=mysql
+    networks:
+      - webank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ====== Spring Boot 业务系统 ======
+  spring-boot-app:
+    build:
+      context: ./spring-boot-app
+      dockerfile: Dockerfile
+    container_name: keycloak-demo-app
+    restart: unless-stopped
+    environment:
+      # 数据库配置
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-webank}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-webank}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-webank123}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      
+      # Keycloak 配置
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-webank}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-spring-boot-app}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-change-me}
+      KEYCLOAK_AUTH_SERVER_URL: ${KEYCLOAK_AUTH_SERVER_URL:-http://keycloak:8080}
+      
+      # 阿里云配置
+      ALIYUN_ACCESS_KEY_ID: ${ALIYUN_ACCESS_KEY_ID:-}
+      ALIYUN_ACCESS_KEY_SECRET: ${ALIYUN_ACCESS_KEY_SECRET:-}
+      ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-}
+      ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-}
+      ALIYUN_EMAIL_FROM: ${ALIYUN_EMAIL_FROM:-}
+      ALIYUN_EMAIL_FROM_ALIAS: ${ALIYUN_EMAIL_FROM_ALIAS:-Webank Demo}
+      
+      # 应用配置
+      SERVER_PORT: 8080
+      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+      SPRING_JPA_SHOW_SQL: "false"
+      LOGGING_LEVEL_ROOT: INFO
+      LOGGING_LEVEL_COM_WEBANK: DEBUG
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - webank-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ====== 数据卷 ======
+volumes:
+  mysql_data:
+    driver: local
+  keycloak_data:
+    driver: local
+
+# ====== 网络 ======
+networks:
+  webank-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

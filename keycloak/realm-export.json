@@ -1,0 +1,82 @@
+{
+  "realm": "webank",
+  "displayName": "Webank Demo",
+  "enabled": true,
+  "sslRequired": "external",
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@example.com",
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123"
+        }
+      ],
+      "realmRoles": [
+        "default-roles-webank",
+        "admin"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrator role"
+      },
+      {
+        "name": "user",
+        "description": "User role"
+      }
+    ],
+    "client": {
+      "spring-boot-app": [
+        {
+          "name": "admin",
+          "description": "Application admin"
+        },
+        {
+          "name": "user",
+          "description": "Application user"
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "spring-boot-app",
+      "name": "Spring Boot Application",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "change-me",
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:8080/login/oauth2/code/keycloak"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:3000"
+      ],
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true
+    }
+  ],
+  "requiredCredentials": [
+    "password"
+  ],
+  "passwordPolicy": "length(8) and specialChars(1) and upperCase(1)",
+  "defaultRoles": [
+    "default-roles-webank",
+    "user"
+  ]
+}
