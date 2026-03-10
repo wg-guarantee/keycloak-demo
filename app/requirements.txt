@@ -1,0 +1,21 @@
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.0
+
+# ── OIDC / OAuth2 (handles PKCE, token exchange, JWKS verification) ──────────
+authlib==1.4.1
+httpx==0.28.1
+
+# ── Session middleware (signed cookie) ────────────────────────────────────────
+itsdangerous==2.2.0
+
+# ── Keycloak realm initialisation (runs at container startup) ─────────────────
+python-keycloak==4.7.3
+requests==2.32.3
+
+# ── Templating ────────────────────────────────────────────────────────────────
+jinja2==3.1.6
+python-multipart==0.0.20
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+python-dotenv==1.0.1

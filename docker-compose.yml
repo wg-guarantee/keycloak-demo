@@ -1,146 +1,127 @@
-version: '3.8'
+# ============================================================
+# docker-compose.yml  –  Keycloak Demo: 一键启动所有服务
+# ============================================================
+# 用法：
+#   cp .env.example .env   # 填写腾讯云 SMS 和 Session 密钥
+#   docker compose up -d   # 启动 PostgreSQL + Keycloak + FastAPI
+#
+# 单独启动 Keycloak（不含 App）：
+#   docker compose up -d postgres keycloak
+#
+# 单独启动 App（需要 Keycloak 已运行）：
+#   docker compose up -d app
+# ============================================================
 
-# Keycloak Demo - Docker Compose 完整配置版本 v1.0
+name: keycloak-demo
 
 services:
-  # ====== MySQL 数据库 ======
-  mysql:
-    image: mysql:8.0
-    container_name: keycloak-demo-mysql
+
+  # ══════════════════════════════════════════════════════════
+  # 基础设施：PostgreSQL + Keycloak
+  # ══════════════════════════════════════════════════════════
+
+  postgres:
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-webank}
-      MYSQL_USER: ${MYSQL_USER:-webank}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-webank123}
-      MYSQL_TEST_CONTAINER: "true"
-    ports:
-      - "3306:3306"
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./database/init.sql:/docker-entrypoint-initdb.d/1-init.sql
-      - ./database/migrations/V1__initial_schema.sql:/docker-entrypoint-initdb.d/2-flyway.sql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${MYSQL_USER:-webank}", "-p${MYSQL_PASSWORD:-webank123}"]
-      timeout: 20s
-      retries: 10
-      start_period: 40s
-    networks:
-      - webank-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  # ====== Keycloak 认证服务 ======
   keycloak:
-    image: quay.io/keycloak/keycloak:22.0.0
-    container_name: keycloak-demo-keycloak
-    restart: unless-stopped
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin123}
-      KC_DB: mysql
-      KC_DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-webank}?useSSL=false&serverTimezone=UTC
-      KC_DB_USERNAME: ${MYSQL_USER:-webank}
-      KC_DB_PASSWORD: ${MYSQL_PASSWORD:-webank123}
-      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
-      KC_HOSTNAME_PORT: 8180
-      KC_PROXY: edge
-      KC_HTTP_ENABLED: "true"
-      KEYCLOAK_LOGLEVEL: INFO
-      ROOT_LOGLEVEL: INFO
-    ports:
-      - "8180:8080"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    volumes:
-      - keycloak_data:/opt/keycloak/data
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    command:
-      - start
-      - --import-realm
-      - --db=mysql
-    networks:
-      - webank-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      timeout: 10s
-      retries: 20
-      start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # ====== Spring Boot 业务系统 ======
-  spring-boot-app:
+    # 先构建包含腾讯云 SMS SPI 的自定义镜像，再启动
+    # 构建前需要运行：cd keycloak-spi && mvn clean package -DskipTests
     build:
-      context: ./spring-boot-app
+      context: ./keycloak-spi
       dockerfile: Dockerfile
-    container_name: keycloak-demo-app
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      # ── 数据库 ─────────────────────────────────────────────
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # ── 管理员账号（首次启动初始化，之后可删除此变量）────────
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+
+      # ── 对外访问地址（浏览器和 Token Issuer 使用此地址）──────
+      # KC_HOSTNAME 决定 JWT 中 iss 字段的值，必须是浏览器可访问的完整 URL
+      KC_HOSTNAME: http://${KEYCLOAK_HOST:-43.161.250.138}:${KEYCLOAK_PORT:-8080}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+
+      # ── 腾讯云 SMS（Mock 模式：OTP 打印到日志，无需填写真实凭据）──────
+      # 查看验证码：docker compose logs keycloak | grep "[SMS-MOCK]"
+      # 如需接入真实 SMS，在 TencentSmsService.java 中替换实现并开启以下变量：
+      # TENCENT_SMS_SECRET_ID: ${TENCENT_SMS_SECRET_ID}
+      # TENCENT_SMS_SECRET_KEY: ${TENCENT_SMS_SECRET_KEY}
+      # TENCENT_SMS_APP_ID: ${TENCENT_SMS_APP_ID}
+      # TENCENT_SMS_SIGN_NAME: ${TENCENT_SMS_SIGN_NAME}
+      # TENCENT_SMS_TEMPLATE_ID: ${TENCENT_SMS_TEMPLATE_ID}
+      # TENCENT_SMS_REGION: ${TENCENT_SMS_REGION:-ap-guangzhou}
+
+      # ── 邮件发送 OTP（填写后 SMS Mock 同步发送邮件）──────────
+      # 留空则只打印日志，不发邮件
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # TCP 探测 8080 端口；app 容器的 setup_realm.py 会自动重试直到 HTTP API 就绪
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+
+  # ══════════════════════════════════════════════════════════
+  # 应用：FastAPI
+  # ══════════════════════════════════════════════════════════
+
+  app:
+    build:
+      context: .           # 根目录，使 Dockerfile 能访问 scripts/
+      dockerfile: app/Dockerfile
     restart: unless-stopped
     environment:
-      # 数据库配置
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-webank}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-webank}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-webank123}
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
-      
-      # Keycloak 配置
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-webank}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-spring-boot-app}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-change-me}
-      KEYCLOAK_AUTH_SERVER_URL: ${KEYCLOAK_AUTH_SERVER_URL:-http://keycloak:8080}
-      
-      # 阿里云配置
-      ALIYUN_ACCESS_KEY_ID: ${ALIYUN_ACCESS_KEY_ID:-}
-      ALIYUN_ACCESS_KEY_SECRET: ${ALIYUN_ACCESS_KEY_SECRET:-}
-      ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-}
-      ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-}
-      ALIYUN_EMAIL_FROM: ${ALIYUN_EMAIL_FROM:-}
-      ALIYUN_EMAIL_FROM_ALIAS: ${ALIYUN_EMAIL_FROM_ALIAS:-Webank Demo}
-      
-      # 应用配置
-      SERVER_PORT: 8080
-      SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-      SPRING_JPA_SHOW_SQL: "false"
-      LOGGING_LEVEL_ROOT: INFO
-      LOGGING_LEVEL_COM_WEBANK: DEBUG
+      # Keycloak 对外地址（与 KC_HOSTNAME 保持一致，浏览器也能访问）
+      KEYCLOAK_URL: http://${KEYCLOAK_HOST:-43.161.250.138}:${KEYCLOAK_PORT:-8080}
+      # Realm 初始化脚本需要管理员密码（容器内部通过 http://keycloak:8080 访问）
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      REALM: ${REALM:-demo}
+      CLIENT_ID: ${CLIENT_ID:-demo-app}
+      CLIENT_SECRET: ""
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8000}
+      SESSION_SECRET: ${SESSION_SECRET}
+      # SMTP（邮箱激活 / 忘记密码）—— 留空则关闭邮件功能
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8000}:8000"
     depends_on:
-      mysql:
-        condition: service_healthy
       keycloak:
         condition: service_healthy
-    networks:
-      - webank-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
-      timeout: 10s
-      retries: 20
-      start_period: 60s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
 
-# ====== 数据卷 ======
 volumes:
-  mysql_data:
-    driver: local
-  keycloak_data:
-    driver: local
-
-# ====== 网络 ======
-networks:
-  webank-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+  postgres_data:
+    name: keycloak-demo-postgres-data

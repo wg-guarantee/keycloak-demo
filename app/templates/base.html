@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>{% block title %}Keycloak Demo{% endblock %}</title>
+    <style>
+        /* ── Reset & base ─────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            min-height: 100vh;
+        }
+
+        /* ── Nav ──────────────────────────────────────────────────── */
+        nav {
+            background: #16213e;
+            color: #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            height: 56px;
+        }
+        nav .brand {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #4fc3f7;
+            text-decoration: none;
+        }
+        nav .nav-links { display: flex; gap: 1rem; align-items: center; }
+        nav a { color: #ccc; text-decoration: none; font-size: .9rem; }
+        nav a:hover { color: #fff; }
+        nav .btn-nav {
+            background: #4fc3f7;
+            color: #16213e !important;
+            padding: .3rem .9rem;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        /* ── Main container ───────────────────────────────────────── */
+        .container {
+            max-width: 960px;
+            margin: 2.5rem auto;
+            padding: 0 1rem;
+        }
+
+        /* ── Card ─────────────────────────────────────────────────── */
+        .card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.08);
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        .card h1, .card h2 { margin-bottom: 1rem; }
+
+        /* ── Buttons ──────────────────────────────────────────────── */
+        .btn {
+            display: inline-block;
+            padding: .55rem 1.4rem;
+            border-radius: 5px;
+            font-size: .95rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: opacity .15s;
+        }
+        .btn:hover { opacity: .87; }
+        .btn-primary   { background: #1a73e8; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .btn-danger    { background: #dc3545; color: #fff; }
+        .btn-success   { background: #28a745; color: #fff; }
+
+        /* ── Code blocks (token display) ──────────────────────────── */
+        pre {
+            background: #1e1e2e;
+            color: #cdd6f4;
+            border-radius: 6px;
+            padding: 1rem 1.2rem;
+            font-size: .82rem;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+
+        /* ── Badge ────────────────────────────────────────────────── */
+        .badge {
+            display: inline-block;
+            padding: .25em .6em;
+            border-radius: 999px;
+            font-size: .78rem;
+            font-weight: 700;
+        }
+        .badge-green  { background: #d4edda; color: #155724; }
+        .badge-blue   { background: #cce5ff; color: #004085; }
+        .badge-yellow { background: #fff3cd; color: #856404; }
+
+        /* ── Flow diagram ─────────────────────────────────────────── */
+        .flow-steps { list-style: none; counter-reset: step; }
+        .flow-steps li {
+            counter-increment: step;
+            display: flex;
+            align-items: flex-start;
+            gap: .75rem;
+            margin-bottom: .85rem;
+            font-size: .92rem;
+        }
+        .flow-steps li::before {
+            content: "⑨";
+            /* Override each with nth-child or use data attrs */
+            background: #1a73e8;
+            color: #fff;
+            border-radius: 50%;
+            width: 1.6rem;
+            height: 1.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: .78rem;
+            flex-shrink: 0;
+        }
+
+        /* ── Alert ────────────────────────────────────────────────── */
+        .alert {
+            padding: .75rem 1rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            font-size: .9rem;
+        }
+        .alert-info    { background: #d1ecf1; color: #0c5460; }
+        .alert-success { background: #d4edda; color: #155724; }
+        .alert-warning { background: #fff3cd; color: #856404; }
+        .alert-danger  { background: #f8d7da; color: #721c24; }
+
+        /* ── Table ────────────────────────────────────────────────── */
+        table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+        th, td { padding: .55rem .9rem; border-bottom: 1px solid #e8e8e8; text-align: left; }
+        th { background: #f8f9fa; font-weight: 600; color: #555; }
+        tr:hover td { background: #fafafa; }
+
+        /* ── Footer ───────────────────────────────────────────────── */
+        footer {
+            text-align: center;
+            padding: 1.5rem;
+            color: #999;
+            font-size: .8rem;
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+<nav>
+    <a href="/" class="brand">🔐 Keycloak Demo</a>
+    <div class="nav-links">
+        {% if user %}
+            <span>👤 {{ user.preferred_username or user.email }}</span>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/profile">Profile</a>
+            <a href="/api/me">API /me</a>
+            <a href="/auth/logout" class="btn-nav">Logout</a>
+        {% else %}
+            <a href="/auth/login" class="btn-nav">Login / Register</a>
+        {% endif %}
+    </div>
+</nav>
+
+<div class="container">
+    {% block content %}{% endblock %}
+</div>
+
+<footer>Keycloak 26.5.5 · Authorization Code Flow + PKCE Demo · Python FastAPI</footer>
+</body>
+</html>

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – Keycloak Demo{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h1>🏠 Dashboard</h1>
+    <p style="color:#555;">
+        你已通过 Keycloak Authorization Code Flow 完成身份验证。以下是本次会话的信息。
+    </p>
+</div>
+
+<!-- ── 用户信息 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>👤 用户信息（来自 Keycloak ID Token）</h2>
+    <table style="margin-top:1rem;">
+        <tbody>
+            <tr><th>用户名</th><td>{{ user.preferred_username }}</td></tr>
+            <tr><th>邮箱</th><td>
+                {{ user.email }}
+                {% if user.email_verified %}
+                    <span class="badge badge-green">✓ 已验证</span>
+                {% else %}
+                    <span class="badge badge-yellow">⚠ 未验证</span>
+                {% endif %}
+            </td></tr>
+            <tr><th>姓名</th><td>{{ user.name or "—" }}</td></tr>
+            <tr><th>手机号</th><td>{{ user.get("phoneNumber") or user.get("phone_number") or "—" }}</td></tr>
+            <tr><th>Subject (sub)</th><td><code style="font-size:.8rem;">{{ user.sub }}</code></td></tr>
+            <tr><th>Keycloak Roles</th><td>
+                {% set roles = user.get("realm_access", {}).get("roles", []) %}
+                {% for role in roles %}
+                    <span class="badge badge-blue">{{ role }}</span>
+                {% else %}
+                    <em style="color:#999;">—（无特殊角色）</em>
+                {% endfor %}
+            </td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ── Token 状态 ─────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>🔑 Token 状态</h2>
+    <table style="margin-top:1rem;">
+        <tbody>
+            <tr>
+                <th>Access Token</th>
+                <td>
+                    {% if token.access_token %}
+                        <span class="badge badge-green">✓ 已获取（{{ token.access_token[:20] }}…）</span>
+                    {% else %}
+                        <span class="badge badge-yellow">未获取</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>Refresh Token</th>
+                <td>
+                    {% if token.refresh_token %}
+                        <span class="badge badge-green">✓ 已获取</span>
+                    {% else %}
+                        <span class="badge badge-yellow">未获取</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <th>ID Token Claims 来源</th>
+                <td><span class="badge badge-blue">authlib 自动验签（JWKS）</span></td>
+            </tr>
+        </tbody>
+    </table>
+    <p style="margin-top:1rem; color:#666; font-size:.88rem;">
+        💡 Token 由 <code>authlib</code> 在 <code>/auth/callback</code> 时自动换取并验证，
+        应用代码无需编写任何 JWT 解析逻辑。
+    </p>
+</div>
+
+<!-- ── 快捷操作 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>🚀 演示操作</h2>
+    <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+        <a href="/profile" class="btn btn-primary">查看完整 Profile</a>
+        <a href="/api/me" class="btn btn-secondary">调用 API /api/me</a>
+        <a href="/api/token-info" class="btn btn-secondary">Token 元信息</a>
+        <a href="/change-password" class="btn btn-success">修改密码</a>
+        <a href="/auth/logout" class="btn btn-danger">退出登录</a>
+    </div>
+</div>
+
+<!-- ── 流程回顾 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>📊 本次登录流程回顾</h2>
+    <ol style="margin-top:1rem; padding-left:1.5rem; line-height:2;">
+        <li>浏览器访问 <code>/dashboard</code> → <code>require_login</code> 检测到未登录</li>
+        <li>重定向到 <code>/auth/login</code> → authlib 生成 PKCE code_challenge</li>
+        <li>浏览器跳转到 Keycloak 登录页（含短信 OTP 验证）</li>
+        <li>Keycloak 验证通过 → 回调 <code>/auth/callback?code=xxx&state=xxx</code></li>
+        <li>authlib 验证 state，用 code + code_verifier 向 Keycloak 换取 Token</li>
+        <li>authlib 通过 JWKS 验证 ID Token 签名，解析 claims</li>
+        <li>用户信息写入 Session → 重定向回 Dashboard ✅</li>
+    </ol>
+</div>
+
+{% endblock %}

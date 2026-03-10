@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Profile – Keycloak Demo{% endblock %}
+
+{% block content %}
+
+<div class="card">
+    <h1>👤 用户 Profile</h1>
+    <p style="color:#555;">
+        以下是 Keycloak 颁发的 ID Token 中包含的所有 OIDC Claims。
+    </p>
+</div>
+
+<!-- ── 所有 Claims ────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>📋 OIDC Claims（Raw）</h2>
+    <pre style="margin-top:1rem;">{{ user | tojson(indent=2) }}</pre>
+    <p style="margin-top:.8rem; color:#666; font-size:.85rem;">
+        这些 claims 由 <code>authlib</code> 在 callback 时从 ID Token 解析并写入 Session，
+        应用代码无需调用任何解密/验签 API。
+    </p>
+</div>
+
+<!-- ── 常用字段 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>🔍 常用字段</h2>
+    <table style="margin-top:1rem;">
+        <tbody>
+            <tr><th style="width:200px;">preferred_username</th><td>{{ user.preferred_username }}</td></tr>
+            <tr><th>email</th><td>
+                {{ user.email }}
+                {% if user.email_verified %}
+                    <span class="badge badge-green">✓ 已验证</span>
+                {% else %}
+                    <span class="badge badge-yellow">⚠ 未验证</span>
+                    <a href="{{ account_console_url }}/#/personal-info" style="font-size:.85rem; margin-left:.5rem;">
+                        → 去激活邮箱
+                    </a>
+                {% endif %}
+            </td></tr>
+            <tr><th>given_name / family_name</th>
+                <td>{{ user.given_name or "—" }} / {{ user.family_name or "—" }}</td></tr>
+            <tr><th>phone_number</th>
+                <td>{{ user.phoneNumber or user.get("phone_number", "—") }}</td></tr>
+            <tr><th>sub (唯一 ID)</th>
+                <td><code style="font-size:.82rem; word-break:break-all;">{{ user.sub }}</code></td></tr>
+            <tr><th>iss (Issuer)</th>
+                <td><code style="font-size:.82rem;">{{ user.iss }}</code></td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ── 账号管理 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>⚙️ 账号自助管理</h2>
+    <p style="color:#666; margin-bottom:1rem; font-size:.9rem;">
+        以下操作均由 Keycloak Account Console 完成，应用无需开发任何页面。
+    </p>
+    <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+        <a href="{{ account_console_url }}/#/personal-info" class="btn btn-primary" target="_blank">
+            ✏️ 修改个人信息
+        </a>
+        <a href="{{ account_console_url }}/#/security/signingin" class="btn btn-success" target="_blank">
+            🔒 修改密码
+        </a>
+        <a href="{{ account_console_url }}/#/security/device-activity" class="btn btn-secondary" target="_blank">
+            📱 设备管理
+        </a>
+        <a href="/auth/logout" class="btn btn-danger">
+            🚪 退出登录
+        </a>
+    </div>
+    <p style="margin-top:1rem; color:#999; font-size:.82rem;">
+        Account Console URL: <code>{{ account_console_url }}</code>
+    </p>
+</div>
+
+{% endblock %}

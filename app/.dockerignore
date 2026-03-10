@@ -1,0 +1,16 @@
+# 不打包进镜像的文件
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.git/
+.gitignore
+Dockerfile

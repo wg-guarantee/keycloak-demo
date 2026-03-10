@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}首页 – Keycloak Demo{% endblock %}
+
+{% block content %}
+
+<!-- ── Hero ──────────────────────────────────────────────────────────────── -->
+<div class="card" style="text-align:center; padding: 3rem 2rem;">
+    <h1 style="font-size:2rem; margin-bottom:.5rem;">🔐 Keycloak Authorization Code Flow</h1>
+    <p style="color:#555; margin-bottom:2rem; font-size:1.05rem;">
+        Standard OIDC Authorization Code Flow + PKCE · Keycloak 26.5.5 · Python FastAPI
+    </p>
+
+    {% if user %}
+        <div class="alert alert-success" style="display:inline-block; margin-bottom:1.5rem;">
+            ✅ 已登录：<strong>{{ user.preferred_username or user.email }}</strong>
+        </div><br>
+        <a href="/dashboard" class="btn btn-primary">进入 Dashboard →</a>
+    {% else %}
+        <a href="/auth/login" class="btn btn-primary" style="font-size:1.1rem; padding:.7rem 2rem;">
+            点击登录 / 注册
+        </a>
+        <p style="color:#999; margin-top:.8rem; font-size:.85rem;">
+            点击后将重定向到 Keycloak 统一身份认证页面
+        </p>
+    {% endif %}
+</div>
+
+<!-- ── Authorization Code Flow 说明 ─────────────────────────────────────── -->
+<div class="card">
+    <h2>📋 Authorization Code Flow 流程</h2>
+    <table style="margin-top:1rem;">
+        <thead>
+            <tr>
+                <th style="width:40px;">#</th>
+                <th>步骤</th>
+                <th>谁执行</th>
+                <th>说明</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>①</td>
+                <td>访问应用</td>
+                <td><span class="badge badge-blue">用户浏览器</span></td>
+                <td>访问 <code>/dashboard</code>，未登录</td>
+            </tr>
+            <tr>
+                <td>②</td>
+                <td>重定向到 Keycloak</td>
+                <td><span class="badge badge-green">应用 (authlib)</span></td>
+                <td>自动生成 PKCE code_challenge，跳转到 Keycloak 登录页</td>
+            </tr>
+            <tr>
+                <td>③</td>
+                <td>用户登录（含短信验证）</td>
+                <td><span class="badge badge-yellow">Keycloak</span></td>
+                <td>输入账号密码 + 短信 OTP，Keycloak 完成验证</td>
+            </tr>
+            <tr>
+                <td>④</td>
+                <td>回调 + Authorization Code</td>
+                <td><span class="badge badge-yellow">Keycloak → 应用</span></td>
+                <td>携带 <code>code</code> 重定向到 <code>/auth/callback</code></td>
+            </tr>
+            <tr>
+                <td>⑤</td>
+                <td>Code 换 Token</td>
+                <td><span class="badge badge-green">应用 (authlib)</span></td>
+                <td>后端用 code + code_verifier 换取 Access/ID/Refresh Token</td>
+            </tr>
+            <tr>
+                <td>⑥</td>
+                <td>Token 验证 + 存 Session</td>
+                <td><span class="badge badge-green">authlib 自动</span></td>
+                <td>验证 ID Token 签名（JWKS），解析 claims，写入 Session</td>
+            </tr>
+            <tr>
+                <td>⑦</td>
+                <td>访问受保护资源</td>
+                <td><span class="badge badge-blue">用户浏览器</span></td>
+                <td>Session 中有用户信息，正常访问业务页面和 API</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ── 演示场景 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>🎬 演示场景</h2>
+    <table style="margin-top:1rem;">
+        <thead>
+            <tr><th>场景</th><th>如何触发</th><th>谁处理</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>🔑 登录</td>
+                <td>点击"登录/注册" → 输入已有账号</td>
+                <td>Keycloak 登录页</td>
+            </tr>
+            <tr>
+                <td>📝 注册</td>
+                <td>登录页 → 点击"Register"</td>
+                <td>Keycloak 注册页（含邮箱激活）</td>
+            </tr>
+            <tr>
+                <td>📱 短信验证码</td>
+                <td>注册/登录时填写手机号</td>
+                <td>Keycloak SMS OTP SPI（腾讯云）</td>
+            </tr>
+            <tr>
+                <td>📧 邮箱激活</td>
+                <td>注册后 Keycloak 自动发送</td>
+                <td>Keycloak + SMTP</td>
+            </tr>
+            <tr>
+                <td>🔒 改密</td>
+                <td><a href="/change-password">点击改密</a> → Keycloak Account Console</td>
+                <td>Keycloak Account Console</td>
+            </tr>
+            <tr>
+                <td>🔌 受保护 API</td>
+                <td><a href="/api/me">GET /api/me</a></td>
+                <td>应用（Session 检查）</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- ── 职责说明 ────────────────────────────────────────────────────────────── -->
+<div class="card">
+    <h2>⚙️ 职责划分：谁写什么</h2>
+    <table style="margin-top:1rem;">
+        <thead>
+            <tr><th>功能</th><th>应用是否编写</th><th>由谁负责</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>登录页面</td><td>❌</td><td>Keycloak 提供</td></tr>
+            <tr><td>注册页面</td><td>❌</td><td>Keycloak 提供</td></tr>
+            <tr><td>忘记密码</td><td>❌</td><td>Keycloak 提供</td></tr>
+            <tr><td>Token 生成</td><td>❌</td><td>Keycloak 自动</td></tr>
+            <tr><td>Token 验证（PKCE+JWKS）</td><td>❌</td><td>authlib 库自动</td></tr>
+            <tr><td>Session 管理</td><td>❌</td><td>SessionMiddleware</td></tr>
+            <tr><td>单点登录逻辑</td><td>❌</td><td>Keycloak SSO</td></tr>
+            <tr><td>短信 OTP 验证（登录流）</td><td>❌</td><td>Keycloak SPI (Java)</td></tr>
+            <tr><td>业务权限判断</td><td>✅</td><td>应用自己写</td></tr>
+            <tr><td>用户业务数据</td><td>✅</td><td>应用自己写</td></tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
